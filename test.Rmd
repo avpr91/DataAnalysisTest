@@ -17,6 +17,7 @@ library(lubridate)
 library(astsa)
 library(forecast)
 library(xts)
+library(readxl)
 ```
 
 # Case1
@@ -153,11 +154,15 @@ autoplot(forecast(ets(data_ts[,"USA"], damped=TRUE), h=10))
 
 ### Other Features
 
-pop Population (in millions).
-emp Number of persons engaged (in millions).
-avh Average annual hours worked by persons engaged.
-hc Index of human capital per person, based on years of schooling (Barro and Lee 2013) and returns
-to education (Psacharopoulos 1994).
+A few variables could aid in explaining the TFP path. In order of importance:
+
+*hc - Index of human capital per person, based on years of schooling (Barro and Lee 2013) and returns to education (Psacharopoulos 1994).*
+
+*pop - Population (in millions):*
+
+*emp - Number of persons engaged (in millions).*
+
+Human capital could be related to productivity, since higher HC would be a key to innovations, therefore they would be positively correlated. Population and number of persons engaged (or number of people employed according to the PWT methodology) could also be positively related to TFP, once more people in a country or participating in the labor market could help in finding new ways to produce goods, in other words, a higher TFP or productivity.
 
 # Case 2
 
@@ -208,8 +213,6 @@ ggplot(soy, aes(x=date, y=tons, col=product))+
   geom_smooth(se=F, method="lm")
 ```
 
-AJUSTAR GRAFICO, AJUSTAR Y AXIS, COMECAR NO ZERO, COLOCAR MAIS ANOS NO X 
-
 From the plot, we notice that both soybean oil and soybean meal exports did not change much in the past 23 years. On the other hand, soybeans export, that was in a similar level of those two in 1997, increased abruptly. One interpretation is that Brazilian soybeans production grew really fast and was directed to exportation before any transformation. Notice also the similar seasonality of all three products, in which the exports spike in some months of the year, likely during the harvest. For a better understanding of the trend, it is better to look at the annual data.
 
 ```{r soy_annual}
@@ -230,15 +233,19 @@ ggplot(tidy_soy_yr_df, aes(x=year, y=value, col=type))+
   geom_line()
 ```
 
-COMO SE PODE VER, SOYBEANS DISPARADO, INTERESSANTE O PLOT DO CRESCIMENTO, QUASE SEMPRE MAIOR QUE ZERO
-```{r plot_soybeans_growth}
+As we can see in the plot, in 2019 soybean oil was slightly below its level in 1997, reaching its peak in 2005. Soybean meal grew `r round(100*(soy_yr_df$soybean_meal[23]-soy_yr_df$soybean_meal[1])/soy_yr_df$soybean_meal[1], 0)`% in this period, contrasting the idea given by the trend in the monthly plot. Finally, soybeans exportation skyrocketed in this period, the total exports annual exports increased by `r round(100*(soy_yr_df$soybeans[23]-soy_yr_df$soybeans[1])/soy_yr_df$soybeans[1],0)`%. We can take a better look at the growth rate for each year below, besides a few years with negative growth, the rates were positive during most of the period, reaching more than 35% in 2001.
+
+```{r plot_soybeans_growth, message=FALSE}
 ggplot(data=soy_yr_df, aes(x=year, y=soybeans_yoy))+
   geom_line()+
   geom_hline(yintercept = 0, col="red")
 ```
 
-**The 3 most important products exported in the last 5 years:**
-```{r}
+**The 3 Most Important Products Exported:**
+
+For this, consider only the last 5 years. Let's annualize the data for all goods.
+
+```{r all_products_tons_yearly}
 corn <- products[["corn"]]
 corn <- aggregate(corn[,c("tons","usd")], by=list(corn$date), FUN=sum)
 corn$product <- "corn"
@@ -250,12 +257,144 @@ sugar$product <- "sugar"
 wheat <- products[["wheat"]]
 wheat <- aggregate(wheat[,c("tons","usd")], by=list(wheat$date), FUN=sum)
 wheat$product <- "wheat"
+
+products_tons_ts <- xts(x=cbind(soybeans=soybeans$tons, soybean_oil=soybean_oil$tons, soybean_meal=soybean_meal$tons, corn=corn$tons, sugar=sugar$tons), order.by=soybeans[,1], frequency=12)
+products_tons_yr <- do.call(rbind, lapply(split(products_tons_ts, "years"), colSums))
+products_tons_yr_df <- cbind.data.frame(year=seq(ymd("1997", truncated=2), ymd("2019", truncated = 2), by="years"), products_tons_yr)
+wheat_tons_ts <- xts(x=wheat$tons, order.by = wheat[,1], frequency=12)
+wheat_tons_yr <- do.call(rbind, lapply(split(wheat_tons_ts, "years"), colSums))
+wheat_tons_yr <- c(rep(NA,6), wheat_tons_yr[1:4], NA, wheat_tons_yr[5:16])
+products_tons_yr_df$wheat <- wheat_tons_yr
+products_tons_yr_df <- as_tibble(products_tons_yr_df)
 ```
 
+```{r table_tons_last5years}
+products_tons_yr_df %>% filter(year(year)>=2015) %>% select(-year) %>% colSums()
+```
 
-imports <- data2 %>% filter(type=="Import")
+The table above informs the cumulative exports of each product in tons during the past 5 years. The three most important products are soybeans, corn and sugar. We could also check the exports in terms of USD to assess their importance.
 
+```{r all_products_usd_yearly}
+products_usd_ts <- xts(x=cbind(soybeans=soybeans$usd, soybean_oil=soybean_oil$usd, soybean_meal=soybean_meal$usd, corn=corn$usd, sugar=sugar$usd), order.by=soybeans[,1], frequency=12)
+products_usd_yr <- do.call(rbind, lapply(split(products_usd_ts, "years"), colSums))
+products_usd_yr_df <- cbind.data.frame(year=seq(ymd("1997", truncated=2), ymd("2019", truncated = 2), by="years"), products_usd_yr)
+wheat_usd_ts <- xts(x=wheat$usd, order.by = wheat[,1], frequency=12)
+wheat_usd_yr <- do.call(rbind, lapply(split(wheat_usd_ts, "years"), colSums))
+wheat_usd_yr <- c(rep(NA,6), wheat_usd_yr[1:4], NA, wheat_usd_yr[5:16])
+products_usd_yr_df$wheat <- wheat_usd_yr
+products_usd_yr_df <- as_tibble(products_usd_yr_df)
+```
 
+```{r table_usd_last5years}
+products_usd_yr_df %>% filter(year(year)>=2015) %>% select(-year) %>% colSums()
+```
+
+In terms of USD, in the past 5 years the three most important products are soybeans, sugar and soybean meal. Although having the second largest exports in tons, corn figures only as the 4th biggest export in USD.
+
+**Importance of Routes:**
+
+```{r routes}
+table <- exports %>% filter(year(date)>=2015) %>% select(product, route) %>% table()
+table
+```
+
+In the last 5 years, Brazil has been exporting corn mainly by sea, in fact, it corresponds to `r round(100*(6055/7677), 1)`% of the total number of transactions.
+
+```{r relative_routes}
+round(100*table/rowSums(table), 1)
+```
+
+Considering the relative importance of routes per product in the last 5 years, sea is the most important route for all categories. Notice, also, that sea corresponds for more than 78% of all shipments for soybean meal, soybeans and corn. The importance is smaller for the other products, but it is never lesser than 43.5%.
+
+**Trade Parterns: Sugar and Corn:**
+
+```{r trade_partners}
+country_n <- data2 %>% filter(product=="corn" | product=="sugar", year(date)>2016) %>% count(country, sort=TRUE)%>% select(country) %>% head(n=5)
+country_tons <- data2 %>% filter(product=="corn" | product=="sugar", year(date)>2016) %>% count(country, wt=tons, sort=TRUE)%>% select(country) %>% head(n=5)
+country_usd <- data2 %>% filter(product=="corn" | product=="sugar", year(date)>2016) %>% count(country, wt=usd, sort=TRUE) %>% select(country) %>% head(n=5)
+table_country <- cbind(country_n, country_tons, country_usd)
+colnames(table_country) <- c("Transactions","Tons","USD")
+table_country
+```
+
+It is possible to list the most important Brazilian trade partners in terms of corn and sugar for the past 3 years. Consider trade partners importance to be related to both imports and exports. As number of transactions (import plus export shipments) the 5 most important partners are the US, Paraguay, Egypt, Spain and Iran. If we consider different metrics, such as tons and USD, the US lose its importance figuring out of the top 5. In terms of tons and USD, Iran is the most important partner for sugar and corn. Notice also the importance of Asian countries for the top 5 using tons as a measure, Japan, Bangladesh and Vietnam are the top 3, 4 and 5, respectively.
+
+**The 5 Most Important Exporter States per Product:**
+
+Again, let's restrict our attention to the past 5 years.
+
+```{r}
+exports %>% filter(year(date)>=2015) %>% group_by(product) %>% count(state, sort=TRUE)
+```
+
+I'd need more time to finish this exercise. The next step is to get the top 5 states per product.
+
+**Forecast:**
+
+In this part, we will forecast annual exports of soybean, soybean meal and corn for the next 11 years in tons. We will use the aggregate annual exports data for each of these 3 products instead of the monthly data. In doing so, we get rid of the monthly seasonality problem.
+
+3- Transformar em TS
+4- variaveis: precos, maiores importadores (top 1 ou 3)
+
+```{r fc_preparations}
+products_fc_df <- products_tons_yr_df %>% select(year, soybeans, soybean_meal, corn)
+
+covariates <- read_excel("covariates.xlsx")
+str(covariates)
+covariates$year <- ymd(covariates$year, truncated = 2)
+covariates <- subset(covariates, year(covariates$year)>=1997)
+```
+
+*Soybeans:*
+
+To forecast annual exports of soybeans we will use data on soybeans prices and the GDP of the most important importer.
+
+```{r soybeans_importer}
+exports %>% filter(product=="soybeans") %>% count(country, wt=tons, sort=TRUE) %>% head(n=5)
+exports %>% filter(product=="soybeans", year(date)>=2015) %>% count(country, wt=tons, sort=TRUE) %>% head(n=5)
+```
+
+China is by far the most important importer of Brazilian soybeans, both overall and for the past 5 years. Therefore, the Chinese GDP will be the only information from importers used here.
+
+```{r transform_soybeans_into_ts}
+soybeans_ts <- ts(data=cbind(tons=products_fc_df$soybeans, price=covariates$price_soybeans, gdp_china=covariates$gdp_china), start=1997, end=2019)
+cor(soybeans_ts)
+```
+
+Notice that the correlation between soybeans exported in tons and chinese gdp is almost 1. For this forecast we will be use the Chinese gdp and the soybeans prices.
+
+```{r soybeans_fc}
+soybeans_mod <- arima(x=soybeans_ts[,"tons"], order=c(1,1,0), xreg=soybeans_ts[,-1])
+checkresiduals(soybeans_mod)
+xreg_soybeans <- covariates[24:34, c(2,5)]
+#soybeans_fc <- forecast(soybeans_mod, xreg=xreg_soybeans)
+```
+
+*Soybean Meal:*
+
+```{r soybean_meal_importer}
+exports %>% filter(product=="soybean_meal") %>% count(country, wt=tons, sort=TRUE) %>% head(n=5)
+exports %>% filter(product=="soybean_meal", year(date)>=2015) %>% count(country, wt=tons, sort=TRUE) %>% head(n=5)
+```
+
+For soybean meal, the Netherlands are the most important importer, althought in the top 3 overall, Germany lost importance in the past 5 years.
+
+```{r transform_soybean_meal_into_ts}
+soybean_meal_ts <- ts(data=cbind(tons=products_fc_df$soybean_meal, price=covariates$price_soybean_meal, gdp_netherlands=covariates$gpd_netherlands, gdp_thai=covariates$gdp_thailand), start=1997, end=2019)
+cor(soybean_meal_ts)
+```
+
+Contemporary correlation of soybean meal exports in tons with soybean meal prices, the Netherlands GDP and Thailand GDP are not negligeble. 
+
+```{r soybean_meal_fc}
+soybean_meal_mod <- arima(x=soybean_meal_ts[,"tons"], order=c(1,1,0), xreg=soybean_meal_ts[,-1])
+checkresiduals(soybean_meal_mod)
+xreg_soybean_meal = ts(covariates[24:34,c(4,7,9)], start=2020, end=2030)
+colnames(xreg_soybean_meal) <- c("price","gdp_netherlands","gdp_thai")
+#soybean_meal_fc <- forecast(object=soybean_meal_mod, xreg=xreg_soybean_meal, h=11)
+```
+
+I run into a problem executing the forecast command that I could not solve in time for both forecasts. Nevertheless, the fundamentals of modelling and getting the forecast were presented. The next step is to solve this problem to indeed get the forecasts.
 
 
 
